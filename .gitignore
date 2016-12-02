@@ -1,0 +1,6 @@
+out/
+packages/
+.fake/
+
+paket.exe
+FAKE_CACHE_*.dll
