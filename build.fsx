@@ -11,6 +11,7 @@ let outDir = "out"
 
 let repo = getBuildParam "repo"
 if String.IsNullOrEmpty repo then failwith "select repo"
+let branch = getBuildParamOrDefault "branch" "master"
 
 let write (path, lines: list<String>) =
   if not (File.Exists path && File.ReadAllLines path |> Array.toList = lines) then
@@ -51,7 +52,6 @@ let insertSnippet (commit : string) (line : string) =
 let insertSnippets (code, commit) = List.collect (insertSnippet commit) code
 
 let generate () =
-  let branch = getBuildParamOrDefault "branch" "master"
   CreateDir outDir
   let commits = Git.CommandHelper.getGitResult repo ("log --reverse --pretty=%H " + branch)
   let summary =
@@ -84,27 +84,53 @@ let handleWatcherEvents (events:FileChange seq) =
     | _ -> generate ()
 
 Target "Generate" (fun _ ->
-    CleanDir outDir
+  CleanDir outDir
 
-    generate()
+  generate()
+)
 
-    use watcher = 
-      !! (repo </> ".git" </> "refs" </> "heads" </> "*.*") 
-      |> WatchChanges handleWatcherEvents
+Target "Preview" (fun _ ->
+  use watcher = 
+    !! (repo </> ".git" </> "refs" </> "heads" </> "*.*") 
+    |> WatchChanges handleWatcherEvents
 
-    StartProcess (fun si ->
-            si.FileName <- "gitbook"
-            si.Arguments <- sprintf "%s %s" "serve" outDir
-        )
-      
-    traceImportant "Waiting for git edits. Press any key to stop."
-    System.Console.ReadKey() |> ignore
-    watcher.Dispose()
+  StartProcess (fun si ->
+          si.FileName <- "gitbook"
+          si.Arguments <- sprintf "%s %s" "serve" outDir
+      )
+    
+  traceImportant "Waiting for git edits. Press any key to stop."
+  System.Console.ReadKey() |> ignore
+  watcher.Dispose()
+)
+
+Target "Publish" (fun _ ->
+  let publishRepo = getBuildParam "publishRepo"
+  if String.IsNullOrEmpty repo then failwith "select publish repo"
+
+  let publishDir = "publish"
+  let publishBranch = 
+    match branch with
+    | Regex "^(.*)_src$" [name] -> name
+    | name -> name + "_gb"
+
+  CleanDir publishDir
+  cloneSingleBranch "" publishRepo publishBranch publishDir
+
+  fullclean publishDir
+  CopyRecursive outDir publishDir true |> printfn "%A"
+  StageAll publishDir
+  Commit publishDir (sprintf "Update generated documentation %s" <| DateTime.UtcNow.ToShortDateString())
+  Branches.push publishDir
 )
 
 Target "All" DoNothing
 
 "Generate"
+  ==> "Preview"
   ==> "All"
+
+"Generate"
+  ==> "Publish"
 
 RunTargetOrDefault "All"
