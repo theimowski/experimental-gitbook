@@ -11,6 +11,10 @@ let outDir = "out"
 
 let repo = getBuildParam "repo"
 if String.IsNullOrEmpty repo then failwith "select repo"
+let githubAccount = getBuildParam "githubAccount"
+let githubRepo = getBuildParam "githubRepo"
+if String.IsNullOrEmpty githubRepo ||
+     String.IsNullOrEmpty githubAccount then failwith "provide github details"
 let branch = getBuildParamOrDefault "branch" "master"
 
 let write (path, lines: list<String>) =
@@ -49,7 +53,24 @@ let insertSnippet (commit : string) (line : string) =
   else
     [line]    
 
-let insertSnippets (code, commit) = List.collect (insertSnippet commit) code
+let insertSnippets commit code = List.collect (insertSnippet commit) code
+
+let insertGithubCommit commit code = 
+  sprintf "GitHub commit: [%s](https://github.com/%s/%s/commit/%s)"
+          commit
+          githubAccount
+          githubRepo
+          commit
+  |> List.singleton
+  |> List.append ["";"---";""]
+  |> List.append code
+
+let insertGitDiff commit code =
+  Git.CommandHelper.getGitResult repo (sprintf "diff %s^..%s --name-status" commit commit)
+  |> Seq.toList
+  |> List.map (sprintf "* %s")
+  |> List.append ["";"Files changed:";""]
+  |> List.append code
 
 let generate () =
   CreateDir outDir
@@ -68,7 +89,11 @@ let generate () =
               Path.GetInvalidFileNameChars()
               |> Array.fold (fun (title: string) c -> title.Replace(c.ToString(), "")) title
             title.ToLowerInvariant().Replace(" ", "_") + ".md"
-        let contents = insertSnippets (msg, commit)
+        let contents = 
+          msg
+          |> insertSnippets commit
+          |> insertGithubCommit commit
+          |> insertGitDiff commit
         let outFile = outDir </> fileName
         write (outFile, contents)
         yield (sprintf "%s* [%s](%s)" (String.replicate level "\t") title fileName) ]
@@ -105,8 +130,7 @@ Target "Preview" (fun _ ->
 )
 
 Target "Publish" (fun _ ->
-  let publishRepo = getBuildParam "publishRepo"
-  if String.IsNullOrEmpty repo then failwith "select publish repo"
+  let publishRepo = sprintf "https://github.com/%s/%s.git" githubAccount githubRepo
 
   let publishDir = "publish"
   let publishBranch = 
