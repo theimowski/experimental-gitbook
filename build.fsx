@@ -65,12 +65,32 @@ let insertGithubCommit commit code =
   |> List.append ["";"---";""]
   |> List.append code
 
+let numStat line =
+  let split = function
+  | Regex "^(\w)\s+(.*)$" [status; name] -> status,name
+  | _ -> failwithf "split cannot parse: %s" line
+
+  let human = function
+  | "A" -> "added"
+  | "D" -> "deleted"
+  | "M" -> "modified"
+  | x -> failwithf "human: %s" x
+
+  let (stat,name) = split line
+  sprintf "* %s (%s)" name (human stat)
+
 let insertGitDiff commit code =
-  Git.CommandHelper.getGitResult repo (sprintf "diff %s^..%s --name-status" commit commit)
-  |> Seq.toList
-  |> List.map (sprintf "* %s")
-  |> List.append ["";"Files changed:";""]
-  |> List.append code
+  let filesChanged =
+    Git.CommandHelper.getGitResult repo (sprintf "diff %s^..%s --name-status" commit commit)
+    |> Seq.toList
+  
+  if filesChanged = List.empty then 
+    code
+  else
+    filesChanged
+    |> List.map numStat
+    |> List.append ["";"Files changed:";""]
+    |> List.append code
 
 let generate () =
   CreateDir outDir
