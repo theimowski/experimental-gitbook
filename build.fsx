@@ -1,4 +1,5 @@
 #r @"packages/build/FAKE/tools/FakeLib.dll"
+#load @"packages/build/FSharp.Formatting/FSharp.Formatting.fsx"
 
 open System
 open System.IO
@@ -7,6 +8,7 @@ open System.Text.RegularExpressions
 open Fake
 open Fake.Git
 
+open FSharp.Literate
 let outDir = "out"
 
 let repo = getBuildParam "repo"
@@ -48,12 +50,19 @@ let insertSnippet (commit : string) (line : string) =
         fileContentsAt commit file 
         |> Seq.toList
       | _ -> 
-        failwithf "invalid format '%s'" line      
-    "```fsharp" :: contents @ ["```"]
-  else
-    [line]    
+        failwithf "invalid format '%s'" line
 
-let insertSnippets commit code = List.collect (insertSnippet commit) code
+    "[lang=fsharp]" :: contents
+    |> List.map (fun x -> "    " + x)
+    |> String.concat Environment.NewLine
+    |> Literate.ParseMarkdownString
+    |> fun x -> Literate.WriteHtml(x, lineNumbers= false, generateAnchors= false)
+    |> fun x -> x.Replace("<code", "<div").Replace("</code", "</div")
+
+  else
+    line    
+
+let insertSnippets commit code = List.map (insertSnippet commit) code
 
 let insertGithubCommit commit code = 
   sprintf "GitHub commit: [%s](https://github.com/%s/%s/commit/%s)"
@@ -96,7 +105,8 @@ let generate () =
   CreateDir outDir
   let commits = Git.CommandHelper.getGitResult repo ("log --reverse --pretty=%H " + branch)
   let summary =
-    [ for commit in commits do
+    commits
+    |> Seq.map (fun commit ->
         let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
         let firstLine = msg |> Seq.item 0
         let level = max 0 (firstLine.LastIndexOf("#"))
@@ -116,10 +126,14 @@ let generate () =
           |> insertGitDiff commit
         let outFile = outDir </> fileName
         write (outFile, contents)
-        yield (sprintf "%s* [%s](%s)" (String.replicate level "\t") title fileName) ]
-  
+        sprintf "%s* [%s](%s)" (String.replicate level "\t") title fileName)
+    |> Seq.toList
+
+  [ "book.json"
+    "custom.css" ]
+  |> Copy outDir
   write (outDir </> "SUMMARY.md", summary)
-  
+
 let handleWatcherEvents (events:FileChange seq) =
   for e in events do
     let fi = fileInfo e.FullPath
@@ -135,6 +149,13 @@ Target "Generate" (fun _ ->
 )
 
 Target "Preview" (fun _ ->
+  
+  ExecProcess (fun si ->
+          si.FileName <- "gitbook"
+          si.Arguments <- sprintf "%s %s" "install" outDir
+      ) (TimeSpan.FromSeconds 10.)
+  |> ignore
+  
   use watcher = 
     !! (repo </> ".git" </> "refs" </> "heads" </> "*.*") 
     |> WatchChanges handleWatcherEvents
