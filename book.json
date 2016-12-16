@@ -6,6 +6,9 @@
         "addcssjs": {
             "css": [
                 "custom.css"
+            ],
+            "js": [
+                "tips.js"
             ]
         }
     }

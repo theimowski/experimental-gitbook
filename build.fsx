@@ -39,25 +39,28 @@ let fileContentsAt commit file =
    
 let insertSnippet (commit : string) (line : string) =
   if line.StartsWith "==> " then
-    let contents = 
+    let contents, snipId = 
       match line with
       | Regex "^==> ([\w\.]+):(\d+)-(\d+)$" [file;Int32 lstart;Int32 lend] ->
         fileContentsAt commit file 
         |> Seq.skip (lstart - 1)
         |> Seq.take (lend - lstart + 1)
-        |> Seq.toList
+        |> Seq.toList, line.Substring("==> ".Length)
       | Regex "^==> ([\w\.]+)$" [file] ->
         fileContentsAt commit file 
-        |> Seq.toList
+        |> Seq.toList, line.Substring("==> ".Length)
       | _ -> 
         failwithf "invalid format '%s'" line
+
+    let tipsRegex = Text.RegularExpressions.Regex("fs\d+")
 
     "[lang=fsharp]" :: contents
     |> List.map (fun x -> "    " + x)
     |> String.concat Environment.NewLine
     |> Literate.ParseMarkdownString
     |> fun x -> Literate.WriteHtml(x, lineNumbers= false, generateAnchors= false)
-    |> fun x -> x.Replace("<code", "<div").Replace("</code", "</div")
+    |> fun x -> x.Replace("<code", "<div").Replace("</code", "</div").Replace("\n","&#10;")
+    |> fun x -> Regex.Replace(x, "(fs\d+)", snipId + "_$1")
 
   else
     line    
@@ -130,7 +133,8 @@ let generate () =
     |> Seq.toList
 
   [ "book.json"
-    "custom.css" ]
+    "custom.css"
+    "tips.js" ]
   |> Copy outDir
   write (outDir </> "SUMMARY.md", summary)
 
