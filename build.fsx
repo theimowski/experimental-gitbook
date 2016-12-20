@@ -54,13 +54,12 @@ let insertSnippet (commit : string) (line : string) =
 
     let tipsRegex = Text.RegularExpressions.Regex("fs\d+")
 
-    "[lang=fsharp]" :: contents
+    "[lang=fsharp]" :: "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll\"" :: contents
     |> List.map (fun x -> "    " + x)
     |> String.concat Environment.NewLine
     |> Literate.ParseMarkdownString
-    |> fun x -> Literate.WriteHtml(x, lineNumbers= false, generateAnchors= false)
+    |> fun x -> Literate.WriteHtml(x, lineNumbers= false, prefix = snipId + "_")
     |> fun x -> x.Replace("<code", "<div").Replace("</code", "</div").Replace("\n","&#10;")
-    |> fun x -> Regex.Replace(x, "(fs\d+)", snipId + "_$1")
 
   else
     line    
