@@ -1,9 +1,14 @@
-#r @"packages/build/FAKE/tools/FakeLib.dll"
+#I @"packages/build/FAKE/tools"
 #load @"packages/build/FSharp.Formatting/FSharp.Formatting.fsx"
+#r @"Microsoft.Web.XmlTransform.dll"
+#r @"FakeLib.dll"
+#r @"System.Xml.Linq"
 
 open System
 open System.IO
 open System.Text.RegularExpressions
+open System.Xml.Linq
+open System.Xml.XPath
 
 open Fake
 open Fake.Git
@@ -67,6 +72,46 @@ let insertSnippet (commit : string) (line : string) =
 
   else
     line    
+
+module List =
+  let prepend xs ys = List.append ys xs
+
+let projectToScript projectFile =
+  let commit = "c376191"
+  let fsproj = 
+    fileContentsAt commit "SuaveMusicStore.fsproj"
+    |> String.concat "\n"
+    |> XDocument.Parse
+
+  let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
+  ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003");
+
+  let srcFileContent src =
+    fileContentsAt commit src 
+    |> Seq.cast<string> 
+    |> Seq.toList 
+    |> List.append [sprintf "(*** define: %s ***)" src]
+    |> List.prepend [sprintf "(*** include: %s ***)" src]
+
+  let srcFiles = 
+    fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
+    |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
+    |> Seq.toList
+    |> List.filter ((<>) "AssemblyInfo.fs")
+    |> List.collect srcFileContent
+
+  let lines =
+    [ "(*** hide ***)"
+      "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll\"" ]
+
+  let lines = 
+    srcFiles |> List.append lines
+
+  write("basic-routing-gen.fsx", lines)
+  Literate.ProcessScriptFile("basic-routing.fsx",lineNumbers = false)
+  Literate.ProcessScriptFile("basic-routing-gen.fsx",lineNumbers = false)
+
+projectToScript ()
 
 let insertSnippets commit code = List.map (insertSnippet commit) code
 
