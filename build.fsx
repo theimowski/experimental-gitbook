@@ -76,6 +76,14 @@ let insertSnippet (commit : string) (line : string) =
 module List =
   let prepend xs ys = List.append ys xs
 
+type Snippet =
+| SnippetWholeFile
+| SnippetLinesBounded of startLine : int * endLine : int
+
+let snipId = function
+| file, SnippetWholeFile -> file
+| file, SnippetLinesBounded (s, e) -> sprintf "%s:%d-%d" file s e
+
 let projectToScript projectFile =
   let commit = "c376191"
   let fsproj = 
@@ -83,16 +91,63 @@ let projectToScript projectFile =
     |> String.concat "\n"
     |> XDocument.Parse
 
+  //let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
+  //let snippets =
+  //  msg
+  //  |> List.filter (fun x -> x.StartsWith("==> "))
+  //  |> List.map (fun x -> x.Substring("==> ".Length))
+
+  let snippets = 
+    [ "App.fs", SnippetLinesBounded (1, 4)
+      "App.fs", SnippetLinesBounded (6, 14) ]
+    |> List.groupBy fst
+    |> List.map (fun (k,vs) -> k, List.map snd vs)
+    |> Map.ofList
+
   let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
   ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003");
 
-  let srcFileContent src =
-    fileContentsAt commit src 
-    |> Seq.cast<string> 
-    |> Seq.toList 
-    |> List.append [sprintf "(*** define: %s ***)" src]
-    |> List.prepend [sprintf "(*** include: %s ***)" src]
+  let rec chunkByPoints points xs =
+    match points,xs with
+    | [], xs -> [xs]
+    | b :: _, [] -> failwith "nothing to partition"
+    | b :: bs, xs -> 
+      let h,t = List.take b xs, List.skip b xs
+      h :: chunkByPoints (List.map (fun x -> x - b) points) t
 
+  let srcFileContent src =
+    let snippets = Map.find src snippets
+
+    let contents = 
+      fileContentsAt commit src 
+      |> Seq.cast<string> 
+      |> Seq.toList
+
+    let chunks =
+      chunkByPoints [4;5] contents
+      |> List.zip [ Some (SnippetLinesBounded(1,4))
+                    None
+                    Some (SnippetLinesBounded(6, 14)) ]
+
+    let formatChunk = function
+      | None, lines -> 
+        [ [ "(*** hide ***)" ]
+          lines ] |> List.concat
+      | (Some snippet), lines ->
+        [ [ sprintf "(*** define: %s ***)" (snipId (src,snippet)) ]
+          lines 
+          [ sprintf "(*** include: %s ***)" (snipId (src,snippet)) ] ] |> List.concat
+    //  [ (1,4),  Some (SnippetLinesBounded(1,4))
+    //    (5,5),  None
+    //    (6,14), Some (SnippetLinesBounded(6, 14)) ]
+
+    chunks
+    |> List.collect formatChunk
+
+    
+   // |> List.append [sprintf "(*** define: %s ***)" src]
+   // |> List.prepend [sprintf "(*** include: %s ***)" src]
+ 
   let srcFiles = 
     fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
     |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
@@ -111,7 +166,6 @@ let projectToScript projectFile =
   Literate.ProcessScriptFile("basic-routing.fsx",lineNumbers = false)
   Literate.ProcessScriptFile("basic-routing-gen.fsx",lineNumbers = false)
 
-projectToScript ()
 
 let insertSnippets commit code = List.map (insertSnippet commit) code
 
@@ -199,6 +253,9 @@ Target "Generate" (fun _ ->
 
   generate()
 )
+
+Target "Project" (fun () -> projectToScript())
+
 
 Target "Preview" (fun _ ->
   
