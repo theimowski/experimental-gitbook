@@ -82,7 +82,7 @@ type Snippet =
 
 let snipId = function
 | file, SnippetWholeFile -> file
-| file, SnippetLinesBounded (s, e) -> sprintf "%s:%d-%d" file s e
+| file, SnippetLinesBounded (s, e) -> sprintf "%s_%d-%d" file s e
 
 let projectToScript projectFile =
   let commit = "c376191"
@@ -90,12 +90,6 @@ let projectToScript projectFile =
     fileContentsAt commit "SuaveMusicStore.fsproj"
     |> String.concat "\n"
     |> XDocument.Parse
-
-  //let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
-  //let snippets =
-  //  msg
-  //  |> List.filter (fun x -> x.StartsWith("==> "))
-  //  |> List.map (fun x -> x.Substring("==> ".Length))
 
   let snippets = 
     [ "App.fs", SnippetLinesBounded (1, 4)
@@ -113,7 +107,7 @@ let projectToScript projectFile =
     | b :: _, [] -> failwith "nothing to partition"
     | b :: bs, xs -> 
       let h,t = List.take b xs, List.skip b xs
-      h :: chunkByPoints (List.map (fun x -> x - b) points) t
+      h :: chunkByPoints (List.map (fun x -> x - b) bs) t
 
   let srcFileContent src =
     let snippets = Map.find src snippets
@@ -166,7 +160,46 @@ let projectToScript projectFile =
   Literate.ProcessScriptFile("basic-routing.fsx",lineNumbers = false)
   Literate.ProcessScriptFile("basic-routing-gen.fsx",lineNumbers = false)
 
+  let rawHtml = File.ReadAllText "basic-routing-gen.html"
+  let html = XDocument.Parse ("<root>" + rawHtml + "</root>", LoadOptions.PreserveWhitespace)
+  let snippets =
+    html.Root.XPathSelectElements "pre"
+    |> Seq.map (fun x -> x.ToString(SaveOptions.DisableFormatting)
+                          .Replace("<code", "<div")
+                          .Replace("</code", "</div")
+                          .Replace("\n","&#10;"))
+    |> Seq.toList
+  let tips =
+    html.Root.XPathSelectElements "div[@class='tip']"
+    |> Seq.map (fun x -> x.ToString())
+    |> Seq.toList
+  let rec insertSnippets acc snippets content =
+    match content,snippets with
+      | [],[] -> List.rev acc
+      | Regex "^==> ([\w\.]+):(\d+)-(\d+)$" _ :: t, s :: ss
+      | Regex "^==> ([\w\.]+)$" _ :: t, s :: ss ->
+        insertSnippets (s :: acc) ss t
+      | h :: t, s -> 
+        insertSnippets (h :: acc) s t
+      | _ ->
+        failwith "different amount of snippets found"
+  let insertTips content = 
+    tips
+    |> List.append content
+  let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
+  //let snippets =
+  //  msg
+  //  |> List.filter (fun x -> x.StartsWith("==> "))
+  //  |> List.map (fun x -> x.Substring("==> ".Length))
 
+  let fileName = "basic_routing.md"
+  let contents = 
+    msg
+    |> insertSnippets [] snippets
+    |> insertTips
+    //|> insertGithubCommit commit
+    //|> insertGitDiff commit
+  write ("basic_routing.md", contents)
 let insertSnippets commit code = List.map (insertSnippet commit) code
 
 let insertGithubCommit commit code = 
