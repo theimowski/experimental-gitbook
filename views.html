@@ -1,0 +1,46 @@
+<pre class="fssnip highlighted"><code lang="fsharp">  <span class="c">//module SuaveMusicStore.View</span>
+
+  <span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 2)" onmouseover="showTip(event, 'fs2', 2)" class="i">Suave</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs3', 3)" onmouseover="showTip(event, 'fs3', 3)" class="i">Html</span>
+</code></pre>
+<pre class="fssnip highlighted"><code lang="fsharp"> <span class="k">module</span> <span onmouseout="hideTip(event, 'fs4', 4)" onmouseover="showTip(event, 'fs4', 4)" class="t">App</span> <span class="o">=</span> <span class="c">//module SuaveMusicStore.App</span>
+
+  <span class="k">open</span> <span onmouseout="hideTip(event, 'fs2', 5)" onmouseover="showTip(event, 'fs2', 5)" class="i">Suave</span>
+
+  <span class="k">module</span> <span onmouseout="hideTip(event, 'fs5', 6)" onmouseover="showTip(event, 'fs5', 6)" class="t">X</span> <span class="o">=</span> 
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs6', 7)" onmouseover="showTip(event, 'fs6', 7)" class="i">x</span> <span class="o">=</span> <span class="n">1</span>
+
+  <span class="k">module</span> <span onmouseout="hideTip(event, 'fs7', 8)" onmouseover="showTip(event, 'fs7', 8)" class="t">Y</span> <span class="o">=</span> 
+    <span class="k">let</span> <span onmouseout="hideTip(event, 'fs8', 9)" onmouseover="showTip(event, 'fs8', 9)" class="i">y</span> <span class="o">=</span> <span class="n">2</span>
+</code></pre>
+
+
+<div class="tip" id="fs1">module SuaveMusicStore<br /><br />from Views</div>
+<div class="tip" id="fs2">namespace Suave</div>
+<div class="tip" id="fs3">module Html<br /><br />from Suave</div>
+<div class="tip" id="fs4">module App<br /><br />from Views.SuaveMusicStore</div>
+<div class="tip" id="fs5">module X<br /><br />from Views.SuaveMusicStore.App</div>
+<div class="tip" id="fs6">val x : int<br /><br />Full name: Views.SuaveMusicStore.App.X.x</div>
+<div class="tip" id="fs7">module Y<br /><br />from Views.SuaveMusicStore.App</div>
+<div class="tip" id="fs8">val y : int<br /><br />Full name: Views.SuaveMusicStore.App.Y.y</div>
+<div class="tip" id="fs9">module Filters<br /><br />from Suave</div>
+<div class="tip" id="fs10">module Operators<br /><br />from Suave</div>
+<div class="tip" id="fs11">module RequestErrors<br /><br />from Suave</div>
+<div class="tip" id="fs12">module Successful<br /><br />from Suave</div>
+<div class="tip" id="fs13">val browse : (HttpContext -&gt; Async&lt;HttpContext option&gt;)<br /><br />Full name: Views.SuaveMusicStore.App.browse</div>
+<div class="tip" id="fs14">val request : apply:(HttpRequest -&gt; HttpContext -&gt; &#39;a) -&gt; context:HttpContext -&gt; &#39;a<br /><br />Full name: Suave.Http.request</div>
+<div class="tip" id="fs15">val r : HttpRequest</div>
+<div class="tip" id="fs16">member HttpRequest.queryParam : key:string -&gt; Choice&lt;string,string&gt;</div>
+<div class="tip" id="fs17">union case Choice.Choice1Of2: &#39;T1 -&gt; Choice&lt;&#39;T1,&#39;T2&gt;</div>
+<div class="tip" id="fs18">val genre : string</div>
+<div class="tip" id="fs19">val OK : body:string -&gt; WebPart<br /><br />Full name: Suave.Successful.OK</div>
+<div class="tip" id="fs20">val sprintf : format:Printf.StringFormat&lt;&#39;T&gt; -&gt; &#39;T<br /><br />Full name: Microsoft.FSharp.Core.ExtraTopLevelOperators.sprintf</div>
+<div class="tip" id="fs21">union case Choice.Choice2Of2: &#39;T2 -&gt; Choice&lt;&#39;T1,&#39;T2&gt;</div>
+<div class="tip" id="fs22">val msg : string</div>
+<div class="tip" id="fs23">val BAD_REQUEST : body:string -&gt; WebPart<br /><br />Full name: Suave.RequestErrors.BAD_REQUEST</div>
+<div class="tip" id="fs24">val webPart : WebPart&lt;HttpContext&gt;<br /><br />Full name: Views.SuaveMusicStore.App.webPart</div>
+<div class="tip" id="fs25">val choose : options:WebPart&lt;&#39;a&gt; list -&gt; WebPart&lt;&#39;a&gt;<br /><br />Full name: Suave.WebPart.choose</div>
+<div class="tip" id="fs26">val path : pathAfterDomain:string -&gt; WebPart<br /><br />Full name: Suave.Filters.path</div>
+<div class="tip" id="fs27">val pathScan : pf:PrintfFormat&lt;&#39;a,&#39;b,&#39;c,&#39;d,&#39;t&gt; -&gt; h:(&#39;t -&gt; WebPart) -&gt; WebPart<br /><br />Full name: Suave.Filters.pathScan</div>
+<div class="tip" id="fs28">val id : int</div>
+<div class="tip" id="fs29">val startWebServer : config:SuaveConfig -&gt; webpart:WebPart -&gt; unit<br /><br />Full name: Suave.Web.startWebServer</div>
+<div class="tip" id="fs30">val defaultConfig : SuaveConfig<br /><br />Full name: Suave.Web.defaultConfig</div>

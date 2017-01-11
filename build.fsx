@@ -84,16 +84,22 @@ let snipId = function
 | file, SnippetWholeFile -> file
 | file, SnippetLinesBounded (s, e) -> sprintf "%s_%d-%d" file s e
 
+let regexReplace (pattern: string) (replacement: string) (input: string) =
+  Regex(pattern).Replace(input, replacement)
 let projectToScript projectFile =
-  let commit = "c376191"
+  let commit = "2bbfa4f"
   let fsproj = 
     fileContentsAt commit "SuaveMusicStore.fsproj"
     |> String.concat "\n"
     |> XDocument.Parse
 
   let snippets = 
+    (** for basic_routing.md
     [ "App.fs", SnippetLinesBounded (1, 4)
       "App.fs", SnippetLinesBounded (6, 14) ]
+      *)
+    [ "App.fs", SnippetLinesBounded (1, 3)
+      "View.fs", SnippetLinesBounded (1, 3) ]
     |> List.groupBy fst
     |> List.map (fun (k,vs) -> k, List.map snd vs)
     |> Map.ofList
@@ -118,10 +124,15 @@ let projectToScript projectFile =
       |> Seq.toList
 
     let chunks =
+      (** for basic_routing.md 
       chunkByPoints [4;5] contents
       |> List.zip [ Some (SnippetLinesBounded(1,4))
                     None
                     Some (SnippetLinesBounded(6, 14)) ]
+      *)
+      chunkByPoints [3] contents
+      |> List.zip [ Some (SnippetLinesBounded(1,3))
+                    None ]
 
     let formatChunk = function
       | None, lines -> 
@@ -131,17 +142,10 @@ let projectToScript projectFile =
         [ [ sprintf "(*** define: %s ***)" (snipId (src,snippet)) ]
           lines 
           [ sprintf "(*** include: %s ***)" (snipId (src,snippet)) ] ] |> List.concat
-    //  [ (1,4),  Some (SnippetLinesBounded(1,4))
-    //    (5,5),  None
-    //    (6,14), Some (SnippetLinesBounded(6, 14)) ]
-
+    
     chunks
     |> List.collect formatChunk
-
-    
-   // |> List.append [sprintf "(*** define: %s ***)" src]
-   // |> List.prepend [sprintf "(*** include: %s ***)" src]
- 
+  
   let srcFiles = 
     fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
     |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
@@ -151,23 +155,34 @@ let projectToScript projectFile =
 
   let lines =
     [ "(*** hide ***)"
-      "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll\"" ]
+      "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll\""
+      "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.Experimental.dll\"" ]
 
   let lines = 
     srcFiles |> List.append lines
 
-  write("basic-routing-gen.fsx", lines)
-  Literate.ProcessScriptFile("basic-routing.fsx",lineNumbers = false)
-  Literate.ProcessScriptFile("basic-routing-gen.fsx",lineNumbers = false)
+  (** for basic_routing.md
+  let outName = "basic-routing"
+  *)
+  let scriptOutName = "SuaveMusicStore"
+  let outName = "views"
+  write(scriptOutName + "-gen.fsx", lines)
+  Literate.ProcessScriptFile(scriptOutName + ".fsx",lineNumbers = false)
+  let rawHtml = File.ReadAllText (scriptOutName + ".html")
+  //Literate.ProcessScriptFile(scriptOutName + "-gen.fsx",lineNumbers = false)
+  //let rawHtml = File.ReadAllText (scriptOutName + "-gen.html")
 
-  let rawHtml = File.ReadAllText "basic-routing-gen.html"
   let html = XDocument.Parse ("<root>" + rawHtml + "</root>", LoadOptions.PreserveWhitespace)
   let snippets =
     html.Root.XPathSelectElements "pre"
     |> Seq.map (fun x -> x.ToString(SaveOptions.DisableFormatting)
                           .Replace("<code", "<div")
                           .Replace("</code", "</div")
-                          .Replace("\n","&#10;"))
+                          .Replace("\n","&#10;")
+                          .Replace(""" <span class="k">end</span>""","")
+                          |> regexReplace 
+                              """class="t">(\w+)</span> <span class="o">=</span> <span class="k">begin</span>""" 
+                              ("""class="t">""" + scriptOutName + """.$1</span>"""))
     |> Seq.toList
   let tips =
     html.Root.XPathSelectElements "div[@class='tip']"
@@ -187,19 +202,22 @@ let projectToScript projectFile =
     tips
     |> List.append content
   let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
-  //let snippets =
-  //  msg
-  //  |> List.filter (fun x -> x.StartsWith("==> "))
-  //  |> List.map (fun x -> x.Substring("==> ".Length))
-
-  let fileName = "basic_routing.md"
+  
   let contents = 
     msg
     |> insertSnippets [] snippets
     |> insertTips
-    //|> insertGithubCommit commit
-    //|> insertGitDiff commit
-  write ("basic_routing.md", contents)
+  
+  write (outDir </> outName + ".md", contents)
+
+  StartProcess (fun si ->
+          si.FileName <- "gitbook"
+          si.Arguments <- sprintf "%s %s" "serve" outDir
+      )
+
+  traceImportant "Press any key to stop."
+  System.Console.ReadKey() |> ignore
+
 let insertSnippets commit code = List.map (insertSnippet commit) code
 
 let insertGithubCommit commit code = 
