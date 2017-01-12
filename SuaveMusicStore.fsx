@@ -1,6 +1,6 @@
 (*** hide ***)
-#r "/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll"
-#r "/home/tomasz/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
 (*** define: View.fs_1-3 ***)
 module View = begin
 

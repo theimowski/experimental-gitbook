@@ -61,7 +61,7 @@ let insertSnippet (commit : string) (line : string) =
 
     
     "[lang=fsharp]" 
-      :: "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll\"" 
+      :: "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll\"" 
       :: contents
     |> List.map (fun x -> "    " + x)
     |> List.append [sprintf "<em style=\"padding-left: 2em\">%s</em>" snipId; ""] 
@@ -155,8 +155,8 @@ let projectToScript projectFile =
 
   let lines =
     [ "(*** hide ***)"
-      "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll\""
-      "#r \"/home/tomasz/github/SuaveMusicStoreTutorial/Suave.Experimental.dll\"" ]
+      "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll\""
+      "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll\"" ]
 
   let lines = 
     srcFiles |> List.append lines
