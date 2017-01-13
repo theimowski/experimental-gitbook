@@ -16,6 +16,7 @@ open Suave.Filters
 open Suave.Operators
 open Suave.RequestErrors
 open Suave.Successful
+
 let browse =
     request (fun r ->
         match r.queryParam "genre" with

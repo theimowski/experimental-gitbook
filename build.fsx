@@ -84,6 +84,16 @@ let snipId = function
 | file, SnippetWholeFile -> file
 | file, SnippetLinesBounded (s, e) -> sprintf "%s_%d-%d" file s e
 
+let tryParseSnippet = function
+| Regex "^==> ([\w\.]+):(\d+)-(\d+)$" [_; Int32 sl; Int32 el] -> 
+  Some (SnippetLinesBounded(sl,el))
+| Regex "^==> ([\w\.]+)$" [_] -> 
+  Some SnippetWholeFile
+| _ -> 
+  None
+
+let (|Snip|_|) = tryParseSnippet
+
 let regexReplace (pattern: string) (replacement: string) (input: string) =
   Regex(pattern).Replace(input, replacement)
 let projectToScript projectFile =
@@ -115,6 +125,14 @@ let projectToScript projectFile =
       let h,t = List.take b xs, List.skip b xs
       h :: chunkByPoints (List.map (fun x -> x - b) bs) t
 
+  let verboseTopLvlModule lines =
+    match lines with
+    | Regex "module .+\.(.+)" [name] :: t ->
+      let mid, last = List.take (List.length t - 1) t, List.last t
+      sprintf "module %s = begin" name :: mid @ [last + " end"]
+    | _ ->
+      lines
+
   let srcFileContent src =
     let snippets = Map.find src snippets
 
@@ -122,17 +140,47 @@ let projectToScript projectFile =
       fileContentsAt commit src 
       |> Seq.cast<string> 
       |> Seq.toList
+      |> verboseTopLvlModule
+    
+    (*
+    let points = 
+      if (src="App.fs") then 
+        [3] 
+      else
+        []
+    let snips = 
+      if (src = "App.fs") then 
+        [ Some (SnippetLinesBounded(1,3)); None ] 
+      else 
+        [ Some (SnippetLinesBounded(1,3))]
+        *)
+        
+    let rec chunk line chunkAcc (contents, snippets) =
+      match snippets,contents with
+      | [SnippetWholeFile], contents ->
+        [Some SnippetWholeFile, contents]
+      | [], [] ->
+        List.rev chunkAcc
+      | [], _ -> 
+        List.rev ((None, contents) :: chunkAcc)
+      | SnippetLinesBounded (sL, eL) :: snippets, _ when sL = line + 1 ->
+        let lines = contents |> List.take (eL - line)
+        let rest  = contents |> List.skip (eL - line)
+        let s = Some (SnippetLinesBounded (sL, eL)), lines
+        chunk eL (s :: chunkAcc) (rest,snippets)
+      | s,c -> 
+        failwithf "unexpected case, snippets: %A; contents: %A" s c
 
-    let chunks =
+    let chunks = chunk 0 [] (contents, snippets)
       (** for basic_routing.md 
       chunkByPoints [4;5] contents
       |> List.zip [ Some (SnippetLinesBounded(1,4))
                     None
                     Some (SnippetLinesBounded(6, 14)) ]
       *)
-      chunkByPoints [3] contents
-      |> List.zip [ Some (SnippetLinesBounded(1,3))
-                    None ]
+      (*
+      chunkByPoints points contents
+      |> List.zip snips*)
 
     let formatChunk = function
       | None, lines -> 
@@ -167,10 +215,10 @@ let projectToScript projectFile =
   let scriptOutName = "SuaveMusicStore"
   let outName = "views"
   write(scriptOutName + "-gen.fsx", lines)
-  Literate.ProcessScriptFile(scriptOutName + ".fsx",lineNumbers = false)
-  let rawHtml = File.ReadAllText (scriptOutName + ".html")
-  //Literate.ProcessScriptFile(scriptOutName + "-gen.fsx",lineNumbers = false)
-  //let rawHtml = File.ReadAllText (scriptOutName + "-gen.html")
+  //Literate.ProcessScriptFile(scriptOutName + ".fsx",lineNumbers = false)
+  //let rawHtml = File.ReadAllText (scriptOutName + ".html")
+  Literate.ProcessScriptFile(scriptOutName + "-gen.fsx",lineNumbers = false)
+  let rawHtml = File.ReadAllText (scriptOutName + "-gen.html")
 
   let html = XDocument.Parse ("<root>" + rawHtml + "</root>", LoadOptions.PreserveWhitespace)
   let snippets =
@@ -188,6 +236,7 @@ let projectToScript projectFile =
     html.Root.XPathSelectElements "div[@class='tip']"
     |> Seq.map (fun x -> x.ToString())
     |> Seq.toList
+      
   let rec insertSnippets acc snippets content =
     match content,snippets with
       | [],[] -> List.rev acc

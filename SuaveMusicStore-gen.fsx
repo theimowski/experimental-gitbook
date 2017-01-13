@@ -1,14 +1,13 @@
 (*** hide ***)
-#r "/home/tomasz/github/SuaveMusicStoreTutorial/Suave.dll"
-#r "/home/tomasz/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
 (*** define: View.fs_1-3 ***)
-module SuaveMusicStore.View
+module View = begin
 
-open Suave.Html
+open Suave.Html end
 (*** include: View.fs_1-3 ***)
-(*** hide ***)
 (*** define: App.fs_1-3 ***)
-module SuaveMusicStore.App
+module App = begin
 
 open Suave
 (*** include: App.fs_1-3 ***)
@@ -32,4 +31,4 @@ let webPart =
         pathScan "/store/details/%d" (fun id -> OK (sprintf "Details: %d" id))
     ]
 
-startWebServer defaultConfig webPart
+startWebServer defaultConfig webPart end
