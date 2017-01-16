@@ -85,10 +85,10 @@ let snipId = function
 | file, SnippetLinesBounded (s, e) -> sprintf "%s_%d-%d" file s e
 
 let tryParseSnippet = function
-| Regex "^==> ([\w\.]+):(\d+)-(\d+)$" [_; Int32 sl; Int32 el] -> 
-  Some (SnippetLinesBounded(sl,el))
-| Regex "^==> ([\w\.]+)$" [_] -> 
-  Some SnippetWholeFile
+| Regex "^==> ([\w\.]+):(\d+)-(\d+)$" [file; Int32 sl; Int32 el] -> 
+  Some (file, SnippetLinesBounded(sl,el))
+| Regex "^==> ([\w\.]+)$" [file] -> 
+  Some (file, SnippetWholeFile)
 | _ -> 
   None
 
@@ -96,26 +96,44 @@ let (|Snip|_|) = tryParseSnippet
 
 let regexReplace (pattern: string) (replacement: string) (input: string) =
   Regex(pattern).Replace(input, replacement)
+
+let parseFirstMsgLine (firstLine: string) =
+  let level = max 0 (firstLine.LastIndexOf("#"))
+  let title = firstLine.Substring(level + 1).Trim()
+  let fileName =
+    if title = "Introduction" then
+      "README.md"
+    else
+      let title =
+        Path.GetInvalidFileNameChars()
+        |> Array.fold (fun (title: string) c -> title.Replace(c.ToString(), "")) title
+      title.ToLowerInvariant().Replace(" ", "_") + ".md"
+  level,title,fileName
+
 let projectToScript projectFile =
-  let commit = "2bbfa4f"
+  let commit = "951612a"
   let fsproj = 
     fileContentsAt commit "SuaveMusicStore.fsproj"
     |> String.concat "\n"
     |> XDocument.Parse
 
-  let snippets = 
-    (** for basic_routing.md
-    [ "App.fs", SnippetLinesBounded (1, 4)
-      "App.fs", SnippetLinesBounded (6, 14) ]
-      *)
-    [ "App.fs", SnippetLinesBounded (1, 3)
-      "View.fs", SnippetLinesBounded (1, 3) ]
-    |> List.groupBy fst
-    |> List.map (fun (k,vs) -> k, List.map snd vs)
-    |> Map.ofList
+  let srcFiles = 
+    let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
+    ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003")
 
-  let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
-  ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003");
+    fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
+    |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
+    |> Seq.toList
+    |> List.filter ((<>) "AssemblyInfo.fs")
+
+  let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
+
+  let snippets =
+    msg
+    |> List.choose tryParseSnippet
+    |> List.groupBy fst
+    |> List.map (fun (k, vs) -> (k,List.map snd vs))
+    |> Map.ofList
 
   let rec chunkByPoints points xs =
     match points,xs with
@@ -142,19 +160,6 @@ let projectToScript projectFile =
       |> Seq.toList
       |> verboseTopLvlModule
     
-    (*
-    let points = 
-      if (src="App.fs") then 
-        [3] 
-      else
-        []
-    let snips = 
-      if (src = "App.fs") then 
-        [ Some (SnippetLinesBounded(1,3)); None ] 
-      else 
-        [ Some (SnippetLinesBounded(1,3))]
-        *)
-        
     let rec chunk line chunkAcc (contents, snippets) =
       match snippets,contents with
       | [SnippetWholeFile], contents ->
@@ -168,19 +173,13 @@ let projectToScript projectFile =
         let rest  = contents |> List.skip (eL - line)
         let s = Some (SnippetLinesBounded (sL, eL)), lines
         chunk eL (s :: chunkAcc) (rest,snippets)
+      | SnippetLinesBounded (sL, _) :: _, _ ->
+        let lines = contents |> List.take (sL - line - 1)
+        let rest  = contents |> List.skip (sL - line - 1)
+        let n = None, lines
+        chunk (sL - 1) (n :: chunkAcc) (rest,snippets)
       | s,c -> 
-        failwithf "unexpected case, snippets: %A; contents: %A" s c
-
-    let chunks = chunk 0 [] (contents, snippets)
-      (** for basic_routing.md 
-      chunkByPoints [4;5] contents
-      |> List.zip [ Some (SnippetLinesBounded(1,4))
-                    None
-                    Some (SnippetLinesBounded(6, 14)) ]
-      *)
-      (*
-      chunkByPoints points contents
-      |> List.zip snips*)
+        failwithf "unexpected case, line: %d; snippets: %A; contents: %A" line s c
 
     let formatChunk = function
       | None, lines -> 
@@ -191,15 +190,8 @@ let projectToScript projectFile =
           lines 
           [ sprintf "(*** include: %s ***)" (snipId (src,snippet)) ] ] |> List.concat
     
-    chunks
+    chunk 0 [] (contents, snippets)
     |> List.collect formatChunk
-  
-  let srcFiles = 
-    fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
-    |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
-    |> Seq.toList
-    |> List.filter ((<>) "AssemblyInfo.fs")
-    |> List.collect srcFileContent
 
   let lines =
     [ "(*** hide ***)"
@@ -207,13 +199,15 @@ let projectToScript projectFile =
       "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll\"" ]
 
   let lines = 
-    srcFiles |> List.append lines
+    srcFiles 
+    |> List.collect srcFileContent 
+    |> List.append lines
 
   (** for basic_routing.md
   let outName = "basic-routing"
   *)
   let scriptOutName = "SuaveMusicStore"
-  let outName = "views"
+  let _,_,outName = parseFirstMsgLine (Seq.head msg)
   write(scriptOutName + "-gen.fsx", lines)
   //Literate.ProcessScriptFile(scriptOutName + ".fsx",lineNumbers = false)
   //let rawHtml = File.ReadAllText (scriptOutName + ".html")
@@ -250,14 +244,13 @@ let projectToScript projectFile =
   let insertTips content = 
     tips
     |> List.append content
-  let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
   
   let contents = 
     msg
     |> insertSnippets [] snippets
     |> insertTips
   
-  write (outDir </> outName + ".md", contents)
+  write (outDir </> outName, contents)
 
   StartProcess (fun si ->
           si.FileName <- "gitbook"
@@ -314,16 +307,7 @@ let generate () =
     |> Seq.map (fun commit ->
         let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
         let firstLine = msg |> Seq.item 0
-        let level = max 0 (firstLine.LastIndexOf("#"))
-        let title = firstLine.Substring(level + 1).Trim()
-        let fileName =
-          if title = "Introduction" then
-            "README.md"
-          else
-            let title =
-              Path.GetInvalidFileNameChars()
-              |> Array.fold (fun (title: string) c -> title.Replace(c.ToString(), "")) title
-            title.ToLowerInvariant().Replace(" ", "_") + ".md"
+        let level,title,fileName = parseFirstMsgLine firstLine
         let contents = 
           msg
           |> insertSnippets commit

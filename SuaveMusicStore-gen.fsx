@@ -1,17 +1,54 @@
 (*** hide ***)
 #r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll"
 #r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
-(*** define: View.fs_1-3 ***)
+(*** define: Path.fs ***)
+module Path = begin
+
+type IntPath = PrintfFormat<(int -> string),unit,string,string,int>
+
+let home = "/"
+
+module Store =
+    let overview = "/store"
+    let browse = "/store/browse"
+    let details : IntPath = "/store/details/%d" end
+(*** include: Path.fs ***)
+(*** hide ***)
 module View = begin
 
-open Suave.Html end
-(*** include: View.fs_1-3 ***)
-(*** define: App.fs_1-3 ***)
+open Suave.Html
+
+let divId id = divAttr ["id", id]
+let h1 xml = tag "h1" [] xml
+let aHref href = tag "a" ["href", href]
+
+let index = 
+    html [
+        head [
+            title "Suave Music Store"
+        ]
+
+        body [
+(*** define: View.fs_16-18 ***)
+            divId "header" [
+                h1 (aHref Path.home (text "F# Suave Music Store"))
+            ]
+(*** include: View.fs_16-18 ***)
+(*** hide ***)
+
+            divId "footer" [
+                text "built with "
+                aHref "http://fsharp.org" (text "F#")
+                text " and "
+                aHref "http://suave.io" (text "Suave.IO")
+            ]
+        ]
+    ]
+    |> xmlToString end
+(*** hide ***)
 module App = begin
 
 open Suave
-(*** include: App.fs_1-3 ***)
-(*** hide ***)
 open Suave.Filters
 open Suave.Operators
 open Suave.RequestErrors
@@ -23,12 +60,15 @@ let browse =
         | Choice1Of2 genre -> OK (sprintf "Genre: %s" genre)
         | Choice2Of2 msg -> BAD_REQUEST msg)
 
+(*** define: App.fs_15-21 ***)
 let webPart = 
     choose [
-        path "/" >=> (OK "Home")
-        path "/store" >=> (OK "Store")
-        path "/store/browse" >=> browse
-        pathScan "/store/details/%d" (fun id -> OK (sprintf "Details: %d" id))
+        path Path.home >=> (OK View.index)
+        path Path.Store.overview >=> (OK "Store")
+        path Path.Store.browse >=> browse
+        pathScan Path.Store.details (fun id -> OK (sprintf "Details %d" id))
     ]
+(*** include: App.fs_15-21 ***)
+(*** hide ***)
 
 startWebServer defaultConfig webPart end
