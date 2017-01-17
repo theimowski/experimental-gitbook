@@ -152,7 +152,10 @@ let projectToScript projectFile =
       lines
 
   let srcFileContent src =
-    let snippets = Map.find src snippets
+    let snippets = 
+      match Map.tryFind src snippets with
+      | Some s -> s
+      | _ -> []
 
     let contents = 
       fileContentsAt commit src 
