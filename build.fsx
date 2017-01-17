@@ -111,7 +111,7 @@ let parseFirstMsgLine (firstLine: string) =
   level,title,fileName
 
 let projectToScript projectFile =
-  let commit = "951612a"
+  let commit = "5d78e32"
   let fsproj = 
     fileContentsAt commit "SuaveMusicStore.fsproj"
     |> String.concat "\n"
@@ -135,14 +135,6 @@ let projectToScript projectFile =
     |> List.map (fun (k, vs) -> (k,List.map snd vs))
     |> Map.ofList
 
-  let rec chunkByPoints points xs =
-    match points,xs with
-    | [], xs -> [xs]
-    | b :: _, [] -> failwith "nothing to partition"
-    | b :: bs, xs -> 
-      let h,t = List.take b xs, List.skip b xs
-      h :: chunkByPoints (List.map (fun x -> x - b) bs) t
-
   let verboseTopLvlModule lines =
     match lines with
     | Regex "module .+\.(.+)" [name] :: t ->
@@ -156,6 +148,7 @@ let projectToScript projectFile =
       match Map.tryFind src snippets with
       | Some s -> s
       | _ -> []
+      |> List.sort
 
     let contents = 
       fileContentsAt commit src 

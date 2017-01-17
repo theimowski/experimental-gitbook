@@ -1,7 +1,7 @@
 (*** hide ***)
 #r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll"
 #r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
-(*** define: Path.fs ***)
+(*** hide ***)
 module Path = begin
 
 type IntPath = PrintfFormat<(int -> string),unit,string,string,int>
@@ -12,7 +12,6 @@ module Store =
     let overview = "/store"
     let browse = "/store/browse"
     let details : IntPath = "/store/details/%d" end
-(*** include: Path.fs ***)
 (*** hide ***)
 module View = begin
 
@@ -21,19 +20,47 @@ open Suave.Html
 let divId id = divAttr ["id", id]
 let h1 xml = tag "h1" [] xml
 let aHref href = tag "a" ["href", href]
+let cssLink href = linkAttr [ "href", href; " rel", "stylesheet"; " type", "text/css" ]
 
-let index = 
+(*** define: View.fs_10-12 ***)
+let home = [
+    text "Home"
+]
+(*** include: View.fs_10-12 ***)
+(*** define: View.fs_13-24 ***)
+
+let store = [
+    text "Store"
+]
+
+let browse genre = [
+    text (sprintf "Genre: %s" genre)
+]
+
+let details id = [
+    text (sprintf "Details %d" id)
+]
+(*** include: View.fs_13-24 ***)
+(*** hide ***)
+
+(*** define: View.fs_26-31 ***)
+let index container = 
     html [
         head [
             title "Suave Music Store"
+            cssLink "/Site.css"
         ]
+(*** include: View.fs_26-31 ***)
+(*** hide ***)
 
+(*** define: View.fs_33-38 ***)
         body [
-(*** define: View.fs_16-18 ***)
             divId "header" [
                 h1 (aHref Path.home (text "F# Suave Music Store"))
             ]
-(*** include: View.fs_16-18 ***)
+
+            divId "container" container
+(*** include: View.fs_33-38 ***)
 (*** hide ***)
 
             divId "footer" [
@@ -54,21 +81,29 @@ open Suave.Operators
 open Suave.RequestErrors
 open Suave.Successful
 
+(*** define: App.fs_9-10 ***)
+let html container =
+    OK (View.index container)
+(*** include: App.fs_9-10 ***)
+(*** hide ***)
+
+(*** define: App.fs_12-26 ***)
 let browse =
     request (fun r ->
         match r.queryParam "genre" with
-        | Choice1Of2 genre -> OK (sprintf "Genre: %s" genre)
+        | Choice1Of2 genre -> html (View.browse genre)
         | Choice2Of2 msg -> BAD_REQUEST msg)
 
-(*** define: App.fs_15-21 ***)
 let webPart = 
     choose [
-        path Path.home >=> (OK View.index)
-        path Path.Store.overview >=> (OK "Store")
+        path Path.home >=> html View.home
+        path Path.Store.overview >=> html View.store
         path Path.Store.browse >=> browse
-        pathScan Path.Store.details (fun id -> OK (sprintf "Details %d" id))
+        pathScan Path.Store.details (fun id -> html (View.details id))
+
+        pathRegex "(.*)\.(css|png)" >=> Files.browseHome
     ]
-(*** include: App.fs_15-21 ***)
+(*** include: App.fs_12-26 ***)
 (*** hide ***)
 
 startWebServer defaultConfig webPart end
