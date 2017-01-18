@@ -111,7 +111,7 @@ let parseFirstMsgLine (firstLine: string) =
   level,title,fileName
 
 let projectToScript projectFile =
-  let commit = "5d78e32"
+  let commit = "5696df8"
   let fsproj = 
     fileContentsAt commit "SuaveMusicStore.fsproj"
     |> String.concat "\n"
@@ -128,12 +128,30 @@ let projectToScript projectFile =
 
   let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
 
-  let snippets =
-    msg
-    |> List.choose tryParseSnippet
+  let snippets = List.choose tryParseSnippet msg
+    
+  let snippetMap =
+    snippets
     |> List.groupBy fst
     |> List.map (fun (k, vs) -> (k,List.map snd vs))
     |> Map.ofList
+
+  let snippetOrder =
+    let f (_,(srcA,snipA)) (_,(srcB,snipB)) = 
+      let indexA = List.findIndex ((=)srcA) srcFiles
+      let indexB = List.findIndex ((=)srcB) srcFiles
+      let srcOrder = compare indexA indexB
+      if srcOrder <> 0 then
+        srcOrder
+      else
+        compare snipA snipB
+
+    snippets
+    |> List.indexed
+    |> List.sortWith f
+    |> List.map fst
+
+  tracefn "snippetOrder: %A" snippetOrder
 
   let verboseTopLvlModule lines =
     match lines with
@@ -145,7 +163,7 @@ let projectToScript projectFile =
 
   let srcFileContent src =
     let snippets = 
-      match Map.tryFind src snippets with
+      match Map.tryFind src snippetMap with
       | Some s -> s
       | _ -> []
       |> List.sort
@@ -199,14 +217,9 @@ let projectToScript projectFile =
     |> List.collect srcFileContent 
     |> List.append lines
 
-  (** for basic_routing.md
-  let outName = "basic-routing"
-  *)
   let scriptOutName = "SuaveMusicStore"
   let _,_,outName = parseFirstMsgLine (Seq.head msg)
-  write(scriptOutName + "-gen.fsx", lines)
-  //Literate.ProcessScriptFile(scriptOutName + ".fsx",lineNumbers = false)
-  //let rawHtml = File.ReadAllText (scriptOutName + ".html")
+  write(scriptOutName + ".fsx", lines)
   Literate.ProcessScriptFile(scriptOutName + "-gen.fsx",lineNumbers = false)
   let rawHtml = File.ReadAllText (scriptOutName + "-gen.html")
 
@@ -222,6 +235,10 @@ let projectToScript projectFile =
                               """class="t">(\w+)</span> <span class="o">=</span> <span class="k">begin</span>""" 
                               ("""class="t">""" + scriptOutName + """.$1</span>"""))
     |> Seq.toList
+    |> List.zip snippetOrder
+    |> List.sortBy fst
+    |> List.map snd
+
   let tips =
     html.Root.XPathSelectElements "div[@class='tip']"
     |> Seq.map (fun x -> x.ToString())
@@ -230,8 +247,7 @@ let projectToScript projectFile =
   let rec insertSnippets acc snippets content =
     match content,snippets with
       | [],[] -> List.rev acc
-      | Regex "^==> ([\w\.]+):(\d+)-(\d+)$" _ :: t, s :: ss
-      | Regex "^==> ([\w\.]+)$" _ :: t, s :: ss ->
+      | Snip _ :: t, s :: ss ->
         insertSnippets (s :: acc) ss t
       | h :: t, s -> 
         insertSnippets (h :: acc) s t
