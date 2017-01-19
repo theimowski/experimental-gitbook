@@ -42,37 +42,6 @@ let (|Int32|_|) input =
 let fileContentsAt commit file = 
   Git.CommandHelper.getGitResult repo (sprintf "show %s:%s" commit file) 
    
-let insertSnippet (commit : string) (line : string) =
-  if line.StartsWith "==> " then
-    let contents, snipId = 
-      match line with
-      | Regex "^==> ([\w\.]+):(\d+)-(\d+)$" [file;Int32 lstart;Int32 lend] ->
-        fileContentsAt commit file 
-        |> Seq.skip (lstart - 1)
-        |> Seq.take (lend - lstart + 1)
-        |> Seq.toList, line.Substring("==> ".Length)
-      | Regex "^==> ([\w\.]+)$" [file] ->
-        fileContentsAt commit file 
-        |> Seq.toList, line.Substring("==> ".Length)
-      | _ -> 
-        failwithf "invalid format '%s'" line
-
-    let tipsRegex = Text.RegularExpressions.Regex("fs\d+")
-
-    
-    "[lang=fsharp]" 
-      :: "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll\"" 
-      :: contents
-    |> List.map (fun x -> "    " + x)
-    |> List.append [sprintf "<em style=\"padding-left: 2em\">%s</em>" snipId; ""] 
-    |> String.concat Environment.NewLine
-    |> Literate.ParseMarkdownString
-    |> fun x -> Literate.WriteHtml(x, lineNumbers= false, prefix = snipId + "_")
-    |> fun x -> x.Replace("<code", "<div").Replace("</code", "</div").Replace("\n","&#10;")
-
-  else
-    line    
-
 module List =
   let prepend xs ys = List.append ys xs
 
@@ -110,23 +79,24 @@ let parseFirstMsgLine (firstLine: string) =
       title.ToLowerInvariant().Replace(" ", "_") + ".md"
   level,title,fileName
 
-let projectToScript projectFile =
-  let commit = "5696df8"
-  let fsproj = 
-    fileContentsAt commit "SuaveMusicStore.fsproj"
-    |> String.concat "\n"
-    |> XDocument.Parse
-
+let fillSnippets commit msg =
   let srcFiles = 
     let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
     ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003")
 
-    fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
-    |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
-    |> Seq.toList
-    |> List.filter ((<>) "AssemblyInfo.fs")
+    try
+      let fsproj = 
+        fileContentsAt commit "SuaveMusicStore.fsproj"
+        |> String.concat "\n"
+        |> XDocument.Parse
 
-  let msg = Git.CommandHelper.getGitResult repo ("log --format=%B -n 1 " + commit) |> Seq.toList
+      fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
+      |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
+      |> Seq.toList
+      |> List.filter ((<>) "AssemblyInfo.fs")
+    with _ ->
+      tracef "No fsproj for commit %s\n" commit
+      []
 
   let snippets = List.choose tryParseSnippet msg
     
@@ -150,8 +120,6 @@ let projectToScript projectFile =
     |> List.indexed
     |> List.sortWith f
     |> List.map fst
-
-  tracefn "snippetOrder: %A" snippetOrder
 
   let verboseTopLvlModule lines =
     match lines with
@@ -220,8 +188,8 @@ let projectToScript projectFile =
   let scriptOutName = "SuaveMusicStore"
   let _,_,outName = parseFirstMsgLine (Seq.head msg)
   write(scriptOutName + ".fsx", lines)
-  Literate.ProcessScriptFile(scriptOutName + "-gen.fsx",lineNumbers = false)
-  let rawHtml = File.ReadAllText (scriptOutName + "-gen.html")
+  Literate.ProcessScriptFile(scriptOutName + ".fsx",lineNumbers = false)
+  let rawHtml = File.ReadAllText (scriptOutName + ".html")
 
   let html = XDocument.Parse ("<root>" + rawHtml + "</root>", LoadOptions.PreserveWhitespace)
   let snippets =
@@ -257,23 +225,10 @@ let projectToScript projectFile =
     tips
     |> List.append content
   
-  let contents = 
-    msg
-    |> insertSnippets [] snippets
-    |> insertTips
+  msg
+  |> insertSnippets [] snippets
+  |> insertTips
   
-  write (outDir </> outName, contents)
-
-  StartProcess (fun si ->
-          si.FileName <- "gitbook"
-          si.Arguments <- sprintf "%s %s" "serve" outDir
-      )
-
-  traceImportant "Press any key to stop."
-  System.Console.ReadKey() |> ignore
-
-let insertSnippets commit code = List.map (insertSnippet commit) code
-
 let insertGithubCommit commit code = 
   sprintf "GitHub commit: [%s](https://github.com/%s/%s/commit/%s)"
           commit
@@ -322,7 +277,7 @@ let generate () =
         let level,title,fileName = parseFirstMsgLine firstLine
         let contents = 
           msg
-          |> insertSnippets commit
+          |> fillSnippets commit
           |> insertGithubCommit commit
           |> insertGitDiff commit
         let outFile = outDir </> fileName
@@ -349,9 +304,6 @@ Target "Generate" (fun _ ->
 
   generate()
 )
-
-Target "Project" (fun () -> projectToScript())
-
 
 Target "Preview" (fun _ ->
   
