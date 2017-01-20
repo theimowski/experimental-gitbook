@@ -1,6 +1,7 @@
 (*** hide ***)
-#r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll"
-#r "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/packages/FSharp.Core.3.1.2.5/lib/net40/FSharp.Core.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/packages/Suave.1.0.0/lib/net40/Suave.dll"
+#r "/home/vagrant/github/SuaveMusicStoreTutorial/packages/Suave.Experimental.1.0.0/lib/net40/Suave.Experimental.dll"
 (*** hide ***)
 module Path = begin
 

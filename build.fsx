@@ -63,6 +63,14 @@ let tryParseSnippet = function
 
 let (|Snip|_|) = tryParseSnippet
 
+let inline normalizePath(path:string) = 
+  let dirSeparator = Path.DirectorySeparatorChar.ToString()
+  path
+    .Replace("\\",dirSeparator)
+    .Replace("/",dirSeparator)
+    .TrimEnd(Path.DirectorySeparatorChar)
+    .Replace(dirSeparator + "." + dirSeparator, dirSeparator)
+
 let regexReplace (pattern: string) (replacement: string) (input: string) =
   Regex(pattern).Replace(input, replacement)
 
@@ -80,23 +88,37 @@ let parseFirstMsgLine (firstLine: string) =
   level,title,fileName
 
 let fillSnippets commit msg =
-  let srcFiles = 
-    let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
-    ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003")
+  let fsproj = 
+    fileContentsAt commit "SuaveMusicStore.fsproj"
+    |> String.concat "\n"
+    |> fun x -> if String.IsNullOrWhiteSpace x then None else Some x
+    |> Option.map XDocument.Parse
 
-    try
-      let fsproj = 
-        fileContentsAt commit "SuaveMusicStore.fsproj"
-        |> String.concat "\n"
-        |> XDocument.Parse
-
-      fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
-      |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
-      |> Seq.toList
-      |> List.filter ((<>) "AssemblyInfo.fs")
-    with _ ->
+      (*
+  [ "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll"
+    "/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll" ]
+*)
+  let srcFiles,refDlls =
+    match fsproj with
+    | Some fsproj ->
+      let ns = System.Xml.XmlNamespaceManager(System.Xml.NameTable())
+      ns.AddNamespace("msbuild", "http://schemas.microsoft.com/developer/msbuild/2003")
+      let files = 
+        fsproj.Root.XPathSelectElements ("//msbuild:Compile", ns)
+        |> Seq.map (fun e -> e.Attribute(XName.op_Implicit "Include").Value)
+        |> Seq.toList
+        |> List.filter ((<>) "AssemblyInfo.fs")
+      let dlls = 
+        fsproj.Root.XPathSelectElements ("//msbuild:Reference/msbuild:HintPath", ns)
+        |> Seq.map (fun e -> sprintf "%s/%s" repo (normalizePath e.Value))
+        |> Seq.toList
+      files, dlls
+    | None ->
       tracef "No fsproj for commit %s\n" commit
-      []
+      [], []
+
+  refDlls
+  |> List.iter (fun path -> if not <| File.Exists path then failwithf "Cannot find '%s'" path)
 
   let snippets = List.choose tryParseSnippet msg
     
@@ -175,10 +197,8 @@ let fillSnippets commit msg =
     chunk 0 [] (contents, snippets)
     |> List.collect formatChunk
 
-  let lines =
-    [ "(*** hide ***)"
-      "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.dll\""
-      "#r \"/home/vagrant/github/SuaveMusicStoreTutorial/Suave.Experimental.dll\"" ]
+  
+  let lines = "(*** hide ***)" :: (List.map (sprintf "#r \"%s\"") refDlls)
 
   let lines = 
     srcFiles 
